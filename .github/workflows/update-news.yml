@@ -2,7 +2,7 @@ name: Update news
 
 on:
   schedule:
-    - cron: "5 * * * *"      # every hour
+    - cron: "7,22,37,52 * * * *"      # every hour
   workflow_dispatch:          # lets you press a "Run workflow" button
 
 permissions:
