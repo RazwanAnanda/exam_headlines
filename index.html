@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exam-worthy Headlines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Hind+Siliguri:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f2f5f3; --ink:#14231d; --muted:#55675e; --green:#0e5a44; --red:#c0322a; --line:#cfd9d3;
+    --display:"Bricolage Grotesque","Hind Siliguri","Segoe UI",system-ui,sans-serif; --body:"Hind Siliguri","Segoe UI","Noto Sans Bengali",system-ui,sans-serif; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1713; --ink:#e7efea; --muted:#9db0a6; --green:#5fc9a3; --red:#ff8277; --line:#2a3932; } }
+  *,*::before,*::after { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--body); font-size:17px; line-height:1.55; }
+  .wrap { max-width:720px; margin:0 auto; padding:28px 20px 64px; }
+  header { padding-bottom:18px; border-bottom:2px solid var(--ink); }
+  .site { font-family:var(--display); font-weight:600; font-size:15px; color:var(--green); margin:0 0 12px; }
+  h1 { font-family:var(--display); font-weight:800; font-size:clamp(32px,8.5vw,52px); line-height:1.05; margin:0; letter-spacing:-0.02em; }
+  .sub { margin:8px 0 0; color:var(--muted); font-size:16px; }
+  .top { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:16px 0 0; }
+  button { font:inherit; font-size:14.5px; font-weight:500; cursor:pointer; padding:7px 14px; border-radius:999px;
+    border:1.5px solid var(--line); background:transparent; color:var(--ink); }
+  button.reload { border-color:var(--green); color:var(--green); }
+  button[aria-pressed="true"] { background:var(--green); border-color:var(--green); color:var(--bg); }
+  button:focus-visible, a:focus-visible { outline:3px solid var(--red); outline-offset:2px; }
+  .count { color:var(--muted); font-size:14.5px; }
+  details { margin:10px 0 0; color:var(--muted); font-size:14.5px; }
+  pre { white-space:pre-wrap; font-size:12.5px; background:rgba(127,127,127,.12); padding:10px; border-radius:6px; overflow-x:auto; }
+  .tags { color:var(--green); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; padding:12px 0 16px; border-bottom:1px solid var(--line); }
+  .status { margin:14px 0 0; color:var(--muted); font-size:16px; }
+  .status.warn { color:var(--red); }
+  ul { list-style:none; margin:0; padding:0; }
+  li { padding:14px 0 14px 14px; border-left:4px solid var(--green); margin:12px 0; }
+  li.world { border-left-color:var(--red); }
+  li a { color:var(--ink); text-decoration:none; font-weight:500; font-size:18px; }
+  li a:hover { text-decoration:underline; }
+  .meta { margin-top:3px; font-size:14px; color:var(--muted); }
+  footer { margin-top:44px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:14.5px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="site">Exam-worthy Headlines</p>
+    <h1 id="date"></h1>
+    <p class="sub">Only the news that is likely to matter for BCS, bank and other competitive exams. Tap a headline to read the full story.</p>
+  </header>
+
+  <div class="top"><button class="reload" id="reload" type="button">Reload headlines</button><button id="mode" type="button" aria-pressed="true">Exam-worthy only</button><span class="count" id="count"></span></div>
+  <div class="chips" id="chips" role="group" aria-label="Filter by newspaper" hidden></div>
+  <p class="status" id="status">Loading the latest headlines...</p>
+  <details id="why" hidden><summary>Why did some fail? (send this to Claude if it keeps happening)</summary><pre id="whyText"></pre></details>
+  <ul id="list"></ul>
+
+  <footer>
+    <p id="stamp"></p>
+    <p>Headlines are picked automatically by keywords, so check anything important in the full story. Headlines and links belong to the newspapers.</p>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+$("date").textContent = new Date().toLocaleDateString("bn-BD", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+let ALL = [], filter = "All", examOnly = true;
+const THRESHOLD = 3, MAX_SHOWN = 40;
+
+// Each rule adds points when a headline matches. Bangla words are matched as plain text.
+const RULES = [
+  { tag: "Policy & law", w: 3,
+    en: /\b(prime minister|cabinet|parliament|ordinance|bill|policy|reform|constitution|commission|referendum|supreme court|high court|verdict|treaty|agreement|mou|memorandum|sanctions?|ambassador|adviser|president|gazette)\b/i,
+    bn: ["প্রধানমন্ত্রী","মন্ত্রিসভা","সংসদ","অধ্যাদেশ","আইন","নীতি","সংস্কার","সংবিধান","কমিশন","গণভোট","সুপ্রিম কোর্ট","হাইকোর্ট","রায়","চুক্তি","সমঝোতা","নিষেধাজ্ঞা","রাষ্ট্রদূত","উপদেষ্টা","রাষ্ট্রপতি","গেজেট"] },
+  { tag: "Government", w: 2,
+    en: /\b(minister|ministry|government|govt)\b/i,
+    bn: ["মন্ত্রী","মন্ত্রণালয়","সরকার"] },
+  { tag: "Economy", w: 3,
+    en: /\b(budget|gdp|inflation|remittance|reserves?|exports?|imports?|tariffs?|imf|world bank|adb|aiib|loans?|debt|fdi|investment|bangladesh bank|nbr|interest rates?|trade deficit|tax|economy|economic|poverty|wages?|subsid(y|ies)|lpg|fuel price|price hike|record high|record low)\b/i,
+    bn: ["বাজেট","জিডিপি","মূল্যস্ফীতি","রেমিট্যান্স","রিজার্ভ","রপ্তানি","আমদানি","শুল্ক","আইএমএফ","বিশ্বব্যাংক","এডিবি","ঋণ","বিনিয়োগ","বাংলাদেশ ব্যাংক","এনবিআর","সুদের হার","প্রবৃদ্ধি","অর্থনীতি","দারিদ্র্য","ভর্তুকি","জ্বালানি","দাম বাড়"] },
+  { tag: "International", w: 3,
+    en: /\b(united nations|un|unesco|unicef|undp|icj|nato|brics|saarc|bimstec|asean|g20|g7|cop\d+|summit|ceasefire|peace talks|peace deal|security council|diplomatic|bilateral)\b/i,
+    bn: ["জাতিসংঘ","ইউনেসকো","ন্যাটো","ব্রিকস","সার্ক","বিমসটেক","আসিয়ান","শীর্ষ সম্মেলন","যুদ্ধবিরতি","শান্তি আলোচনা","নিরাপত্তা পরিষদ","কূটনৈতিক","দ্বিপাক্ষিক","জলবায়ু সম্মেলন"] },
+  { tag: "Awards & posts", w: 3,
+    en: /\b(nobel|prize|award|laureate|booker|sworn in|appointed|elected)\b/i,
+    bn: ["নোবেল","পুরস্কার","পদক","শপথ","নির্বাচিত"] },
+  { tag: "Projects", w: 3,
+    en: /\b(bridge|metro|tunnel|expressway|seaport|port|airport|power plant|nuclear|rooppur|padma|mongla|payra|matarbari|inaugurat\w*|megaproject|railway|economic zone)\b/i,
+    bn: ["সেতু","মেট্রোরেল","টানেল","এক্সপ্রেসওয়ে","বন্দর","বিমানবন্দর","বিদ্যুৎকেন্দ্র","রূপপুর","পদ্মা","মোংলা","পায়রা","মাতারবাড়ী","উদ্বোধন","রেলপথ","অর্থনৈতিক অঞ্চল"] },
+  { tag: "Science & environment", w: 2,
+    en: /\b(satellite|nasa|isro|spacex|vaccine|discovery|earthquake|cyclone|climate|quantum|outbreak|pandemic|dengue)\b/i,
+    bn: ["স্যাটেলাইট","নাসা","ইসরো","টিকা","আবিষ্কার","ভূমিকম্প","ঘূর্ণিঝড়","জলবায়ু","ডেঙ্গু","মহামারি"] },
+  { tag: "Sports events", w: 2,
+    en: /\b(world cup|asia cup|olympics?|commonwealth games|champions trophy|saff|fifa|tournament)\b/i,
+    bn: ["বিশ্বকাপ","এশিয়া কাপ","অলিম্পিক","কমনওয়েলথ","চ্যাম্পিয়নস ট্রফি","সাফ","টুর্নামেন্ট"] },
+  { tag: "Exams & jobs", w: 4,
+    en: /\b(bcs|public service commission|psc|recruitment|circular|admission|hsc|ssc|syllabus|curriculum)\b/i,
+    bn: ["বিসিএস","পিএসসি","নিয়োগ বিজ্ঞপ্তি","ভর্তি","এইচএসসি","এসএসসি","সিলেবাস","শিক্ষানীতি"] },
+  // Things that are rarely asked in exams pull the score down.
+  { tag: null, w: -3,
+    en: /\b(murder(ed)?|stabbed|rape[ds]?|actor|actress|film|movie|drama|singer|celebrity|viral|horoscope|gossip|recipe|photos?|gallery|lifestyle|fashion|beauty|wedding|arrested|robbery|lynch(ed)?|suicide|body found|dead body|road crash|accident)\b/i,
+    bn: ["খুন","ছুরিকাঘাত","ধর্ষণ","অভিনেতা","অভিনেত্রী","সিনেমা","নাটক","গায়ক","ভাইরাল","রাশিফল","রেসিপি","ছবি","বিয়ে","গ্রেপ্তার","ডাকাতি","আত্মহত্যা","লাশ","সড়ক দুর্ঘটনা"] },
+];
+
+function scoreOf(title) {
+  let score = 0; const tags = [];
+  for (const r of RULES) {
+    if (r.en.test(title) || r.bn.some((w) => title.includes(w))) {
+      score += r.w; if (r.tag) tags.push(r.tag);
+    }
+  }
+  return { score, tags };
+}
+
+function ago(iso) {
+  if (!iso) return "";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60);
+  return h < 24 ? h + " h ago" : Math.round(h / 24) + " d ago";
+}
+
+function draw() {
+  const ul = $("list"); ul.textContent = "";
+  let rows = ALL.filter((r) => filter === "All" || r.name === filter);
+  const total = rows.length;
+  if (examOnly) {
+    rows = rows.filter((r) => r.score >= THRESHOLD)
+      .sort((a, b) => b.score - a.score || (Date.parse(b.time) || 0) - (Date.parse(a.time) || 0))
+      .slice(0, MAX_SHOWN);
+    $("count").textContent = rows.length + " exam-worthy of " + total + " headlines";
+  } else {
+    $("count").textContent = total + " headlines";
+  }
+  if (!rows.length) {
+    const li = document.createElement("li");
+    li.textContent = "Nothing exam-worthy here right now. Try \"Show everything\" or another newspaper.";
+    ul.append(li);
+  }
+  rows.forEach((r) => {
+    const li = document.createElement("li");
+    if (r.group === "World") li.className = "world";
+    const a = document.createElement("a");
+    a.href = r.link; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = r.title;
+    const m = document.createElement("div"); m.className = "meta";
+    m.textContent = r.name + (r.time ? "  ·  " + ago(r.time) : "");
+    if (r.tags && r.tags.length) {
+      const t = document.createElement("span"); t.className = "tags"; t.textContent = "  ·  " + r.tags.join(", ");
+      m.append(t);
+    }
+    li.append(a, m); ul.append(li);
+  });
+  document.querySelectorAll("#chips button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === filter)));
+}
+
+function chip(label) {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = label; b.dataset.f = label;
+  b.addEventListener("click", () => { filter = label; draw(); });
+  return b;
+}
+
+async function load() {
+  const st = $("status"), chips = $("chips");
+  st.hidden = false; st.className = "status"; st.textContent = "Loading the latest headlines...";
+  chips.hidden = true; chips.textContent = ""; $("list").textContent = ""; filter = "All"; $("why").hidden = true;
+  $("reload").disabled = true;
+  try {
+    const resp = await fetch("news.json?t=" + Date.now());
+    if (!resp.ok) throw new Error("news.json not found yet. Run the update once (see README).");
+    const data = await resp.json();
+    if (!data.sources || !data.sources.length) throw new Error("the first update has not run yet. Run it once (see README).");
+    const results = data.sources;
+    const good = results.filter((s) => s.ok);
+    const bad = results.filter((s) => !s.ok).map((s) => s.name);
+    if (!good.length) throw new Error("no newspaper responded. Check your internet connection.");
+    ALL = good.flatMap((s) => s.items.map((i) => ({ ...i, name: s.name, group: s.group })));
+    ALL.forEach((r) => { const x = scoreOf(r.title); r.score = x.score; r.tags = x.tags; });
+    ALL.sort((a, b) => (Date.parse(b.time) || 0) - (Date.parse(a.time) || 0));
+    chips.append(chip("All")); good.forEach((s) => chips.append(chip(s.name))); chips.hidden = false;
+    const why = $("why");
+    if (bad.length) {
+      st.className = "status warn"; st.textContent = "Could not load: " + bad.join(", ") + ".";
+      $("whyText").textContent = results.filter((x) => !x.ok).map((x) => x.name + "\n  " + (x.log || []).slice(-8).join("\n  ")).join("\n\n");
+      why.hidden = false;
+    } else { st.hidden = true; why.hidden = true; }
+    $("stamp").textContent = "Updated: " + new Date().toLocaleString();
+    draw();
+  } catch (e) {
+    st.className = "status warn"; st.textContent = "Could not load headlines: " + e.message;
+  } finally {
+    $("reload").disabled = false;
+  }
+}
+
+$("mode").addEventListener("click", () => {
+  examOnly = !examOnly;
+  $("mode").setAttribute("aria-pressed", String(examOnly));
+  $("mode").textContent = examOnly ? "Exam-worthy only" : "Show everything";
+  draw();
+});
+$("reload").addEventListener("click", load);
+load();
+</script>
+</body>
+</html>
